@@ -12,12 +12,11 @@ export { Model, Collection }
 
 export {Mutation, AttributesValidationErrors, ValidationResultError, ValidationResult, ValidationTask} from './Structures/Model';
 export {Predicate} from './Structures/Collection';
-export * from './HTTP/Response';
-export * from './HTTP/BaseResponse';
-export * from './HTTP/ProxyResponse';
-export * from './HTTP/Request';
-export * from './Errors/ResponseError';
-export * from './Errors/RequestError';
-export * from './Errors/ValidationError';
+export { default as Response } from './HTTP/Response';
+export { default as Request } from './HTTP/Request';
+export { default as ProxyResponse } from './HTTP/ProxyResponse';
+export { default as RequestError } from './Errors/RequestError';
+export { default as ResponseError } from './Errors/ResponseError';
+export { default as ValidationError } from './Errors/ValidationError';
 export * from './Validation';
 export * from './Validation/locale';

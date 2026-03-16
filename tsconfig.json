@@ -3,12 +3,14 @@
     "module": "es6",
     "target": "es6",
     "sourceMap": true,
-    "strict": true,
+    "strict": false,
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "declaration": true,
     "declarationDir": "./src",
-    "outDir": "./src"
+    "outDir": "./src",
+    "skipLibCheck": true
   },
   "include": [
     "src/**/*.ts"

@@ -63,7 +63,7 @@ const parseDate = (value: any, format?: string): Date => {
 
 // We want to set the messages a superglobal so that imports across files
 // reference the same messages object.
-let _global = typeof window !== 'undefined' ? window : (global || {});
+let _global: any = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : {});
 
 class GlobalMessages {
 

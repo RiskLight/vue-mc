@@ -1,50 +1,47 @@
-import * as _ from 'lodash';
-import resolve from 'rollup-plugin-node-resolve';
-import commonjs from 'rollup-plugin-commonjs';
-import pkg from './package.json';
-import typescript from 'typescript';
+import resolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
 import ts_plugin2 from 'rollup-plugin-typescript2';
+import typescript from 'typescript';
 
-const BASE = {
-    external: [
-        'lodash',
-        'vue',
-        'axios',
-    ],
-    plugins: [
-        resolve(),
-        commonjs(),
-        ts_plugin2({
-            typescript,
-            useTsconfigDeclarationDir: true,
-        }),
-    ],
-};
+const external = [
+    'vue',
+    'axios',
+    /^lodash/,
+];
 
-const MAIN = _.assign({}, BASE, {
-    input: 'src/index.ts',
-    output: [
-        {file: pkg.main, format: 'cjs'},
-        {file: pkg.module, format: 'es'},
-    ],
-});
-
-const VALIDATION = _.assign({}, BASE, {
-    input: 'src/Validation/index.ts',
-    output: [
-        {file: 'validation/index.js', format: 'cjs'},
-    ],
-});
-
-const LOCALES = _.assign({}, BASE, {
-    input: './src/Validation/locale.ts',
-    output: [
-        {file: 'validation/locale.js', format: 'cjs'},
-    ],
-});
+const plugins = [
+    resolve(),
+    commonjs(),
+    ts_plugin2({
+        typescript,
+        useTsconfigDeclarationDir: true,
+    }),
+];
 
 export default [
-    MAIN,
-    VALIDATION,
-    LOCALES,
+    {
+        input: 'src/index.ts',
+        external,
+        plugins,
+        output: [
+            {file: 'vue-mc.js', format: 'cjs', exports: 'named'},
+            {file: 'vue-mc.es.js', format: 'es'},
+        ],
+    },
+    {
+        input: 'src/Validation/index.ts',
+        external,
+        plugins,
+        output: [
+            {file: 'validation/index.js', format: 'cjs', exports: 'named'},
+        ],
+    },
+    {
+        input: './src/Validation/locale.ts',
+        external,
+        plugins,
+        output: [
+            {file: 'validation/locale.js', format: 'cjs', exports: 'named'},
+        ],
+    },
 ];

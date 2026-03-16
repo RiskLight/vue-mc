@@ -1,6 +1,6 @@
-import Vue from 'vue';
+import { reactive, shallowRef, markRaw, nextTick } from 'vue';
 import castArray from 'lodash/castArray';
-import cloneDeep from 'lodash/cloneDeep';
+// cloneDeep removed — use copyFrom() which handles Model/Collection refs safely
 import defaults from 'lodash/defaults';
 import defaultTo from 'lodash/defaultTo';
 import each from 'lodash/each';
@@ -73,20 +73,31 @@ const copyFrom = function(source: Record<string, any>, target: Record<string, an
 
     each(source, (value, key): void => {
         if (isArray(value)) {
-            Vue.set(target, key, []);
+            target[key] = [];
             copyFrom(value, target[key]);
 
         } else if (isPlainObject(value)) {
-            Vue.set(target, key, {});
+            target[key] = {};
             copyFrom(value, target[key]);
 
         } else if (isObject(value) && isFunction((value as Collection | Model).clone)) {
-            Vue.set(target, key, (value as Collection | Model).clone());
+            target[key] = (value as Collection | Model).clone();
 
+        } else if (value instanceof Date) {
+            target[key] = new Date(value.getTime());
         } else {
-            Vue.set(target, key, cloneDeep(value));
+            target[key] = value;
         }
     });
+};
+
+/**
+ * Helper to replace the contents of a reactive object without reassigning.
+ * Clears all existing keys, then copies new data in.
+ */
+const replaceReactive = function(target: Record<string, any>, source: Record<string, any>): void {
+    Object.keys(target).forEach(k => delete target[k]);
+    Object.assign(target, source);
 };
 
 /**
@@ -94,17 +105,29 @@ const copyFrom = function(source: Record<string, any>, target: Record<string, an
  */
 class Model extends Base {
     [key: string]: any;
-    readonly loading!: boolean;
-    readonly saving!: boolean;
-    readonly deleting!: boolean;
-    readonly fatal!: boolean;
 
-    private readonly _attributes!: Record<string, any>;
-    private readonly _collections!: Collection[];
+    private _loading!: ReturnType<typeof shallowRef<boolean>>;
+    private _saving!: ReturnType<typeof shallowRef<boolean>>;
+    private _deleting!: ReturnType<typeof shallowRef<boolean>>;
+    private _fatal!: ReturnType<typeof shallowRef<boolean>>;
 
-    private readonly _reference!: Record<string, any>;
+    private _attributes!: Record<string, any>;
+    private _collections!: Record<string, Collection>;
+    private _reference!: Record<string, any>;
     private _mutations!: Record<string, Mutation>;
-    private readonly _errors!: Record<string, string[]>;
+    private _errors!: Record<string, string[]>;
+
+    get loading(): boolean { return this._loading.value; }
+    set loading(value: boolean) { this._loading.value = value; }
+
+    get saving(): boolean { return this._saving.value; }
+    set saving(value: boolean) { this._saving.value = value; }
+
+    get deleting(): boolean { return this._deleting.value; }
+    set deleting(value: boolean) { this._deleting.value = value; }
+
+    get fatal(): boolean { return this._fatal.value; }
+    set fatal(value: boolean) { this._fatal.value = value; }
 
     /**
      * A convenience wrapper around the model's attributes that are saved.
@@ -149,13 +172,20 @@ class Model extends Base {
     constructor(attributes = {}, collection: Collection | null = null, options = {}) {
         super(options);
 
-        Vue.set(this, '_collections', {});  // Collections that contain this model.
-        Vue.set(this, '_reference',   {});  // Saved attribute state.
-        Vue.set(this, '_attributes',  {});  // Active attribute state.
-        Vue.set(this, '_mutations',   {});  // Mutator cache.
-        Vue.set(this, '_errors',      {});  // Validation errors.
+        this._collections = reactive({});  // Collections that contain this model.
+        this._reference   = reactive({});  // Saved attribute state.
+        this._attributes  = reactive({});  // Active attribute state.
+        this._mutations   = reactive({});  // Mutator cache.
+        this._errors      = reactive({});  // Validation errors.
 
-        this.clearState();
+        this._loading  = shallowRef(false);
+        this._saving   = shallowRef(false);
+        this._deleting = shallowRef(false);
+        this._fatal    = shallowRef(false);
+
+        // Mark this instance as raw BEFORE any assignment to prevent
+        // Vue's reactivity system from proxying during construction.
+        markRaw(this);
 
         // Cache certain methods that don't need to be evaluated more than once.
         this.memoize();
@@ -197,8 +227,8 @@ class Model extends Base {
         // Make sure that the clone has the same existing options.
         clone.setOptions(this.getOptions());
 
-        Vue.set(clone, '_reference', reference);
-        Vue.set(clone, '_attributes', attributes);
+        replaceReactive(clone._reference, reference);
+        replaceReactive(clone._attributes, attributes);
 
         return clone;
     }
@@ -307,7 +337,7 @@ class Model extends Base {
      * Compiles all mutations into pipelines that can be executed quickly.
      */
     compileMutators(): void {
-        this._mutations = mapValues(this.mutations(), (m: Mutation | Mutation[]): Mutation => flow(m as Mutation[]));
+        replaceReactive(this._mutations, mapValues(this.mutations(), (m: Mutation | Mutation[]): Mutation => flow(m as Mutation[])));
     }
 
     /**
@@ -335,7 +365,7 @@ class Model extends Base {
             throw new Error('Collection is not valid');
         }
 
-        Vue.set(this._collections, collection._uid, collection);
+        this._collections[collection._uid] = collection;
     }
 
     /**
@@ -356,7 +386,7 @@ class Model extends Base {
             throw new Error('Collection is not valid');
         }
 
-        Vue.delete(this._collections, collection._uid);
+        delete this._collections[collection._uid];
     }
 
     /**
@@ -367,8 +397,12 @@ class Model extends Base {
     clearAttributes(): void {
         let defaults: Record<string, any> = this.defaults();
 
-        Vue.set(this, '_attributes', cloneDeep(defaults));
-        Vue.set(this, '_reference',  cloneDeep(defaults));
+        let attrCopy: Record<string, any> = {};
+        let refCopy: Record<string, any> = {};
+        copyFrom(defaults, attrCopy);
+        copyFrom(defaults, refCopy);
+        replaceReactive(this._attributes, attrCopy);
+        replaceReactive(this._reference, refCopy);
     }
 
     /**
@@ -386,10 +420,10 @@ class Model extends Base {
      * Resets model state, ie. `loading`, etc back to their initial states.
      */
     clearState(): void {
-        Vue.set(this, 'loading',  false);
-        Vue.set(this, 'saving',   false);
-        Vue.set(this, 'deleting', false);
-        Vue.set(this, 'fatal',    false);
+        this.loading  = false;
+        this.saving   = false;
+        this.deleting = false;
+        this.fatal    = false;
     }
 
     /**
@@ -401,7 +435,9 @@ class Model extends Base {
      * @returns {Object} The attributes that were assigned to the model.
      */
     assign(attributes: Record<string, any>): void {
-        this.set(defaults({}, attributes, cloneDeep(this.defaults())));
+        let defaultsCopy: Record<string, any> = {};
+        copyFrom(this.defaults(), defaultsCopy);
+        this.set(defaults({}, attributes, defaultsCopy));
         this.sync();
     }
 
@@ -451,7 +487,7 @@ class Model extends Base {
     mutate(attribute?: string | string[]): void {
         if (isUndefined(attribute)) {
             each(this._attributes, (value, attribute): void => {
-                Vue.set(this._attributes, attribute, this.mutated(attribute, value));
+                this._attributes[attribute] = this.mutated(attribute, value);
             });
 
         // Only mutate specific attributes.
@@ -460,7 +496,7 @@ class Model extends Base {
                 let current: any = this.get(attribute);
                 let mutated: any = this.mutated(attribute, current);
 
-                Vue.set(this._attributes, attribute, mutated);
+                this._attributes[attribute] = mutated;
             });
         }
     }
@@ -484,15 +520,16 @@ class Model extends Base {
         // We're cloning deep to avoid multiple references to the same object,
         // otherwise updating the attributes will also update the reference.
         // Set each saved attribute to its active equivalent.
-        let active: Record<string, any> = cloneDeep(this._attributes);
+        // Using copyFrom instead of cloneDeep to handle Model/Collection refs.
+        let active: Record<string, any> = {};
+        copyFrom(this._attributes, active);
 
         // Sync either specific attributes or all attributes if none provided.
         if (isUndefined(attribute)) {
-            Vue.set(this, '_reference', active);
-
+            replaceReactive(this._reference, active);
         } else {
             each(castArray(attribute), (attribute): void => {
-                Vue.set(this._reference, attribute, get(active, attribute));
+                this._reference[attribute] = get(active, attribute);
             });
         }
 
@@ -556,7 +593,7 @@ class Model extends Base {
             value = this.mutated(attribute as string, value);
         }
 
-        Vue.set(this._attributes, attribute as string, value);
+        this._attributes[attribute as string] = value;
 
         // Only consider a change if the attribute was already defined.
         let changed: boolean = defined && ! isEqual(previous, value);
@@ -565,7 +602,7 @@ class Model extends Base {
 
             // Validate on change only if it's not the first time it's set.
             if (this.getOption('validateOnChange')) {
-                Vue.nextTick((): Promise<ValidationResultErrorFinalResult> => this.validateAttribute(attribute as string));
+                nextTick((): Promise<ValidationResultErrorFinalResult> => this.validateAttribute(attribute as string));
             }
 
             // Emit the change event after
@@ -587,7 +624,8 @@ class Model extends Base {
 
         // We're cloning deep to avoid multiple references to the same object,
         // otherwise updating the attributes will also update the reference.
-        let defaults: Record<string, any> = cloneDeep(this.defaults());
+        let defaults: Record<string, any> = {};
+        copyFrom(this.defaults(), defaults);
 
         // Unset either specific attributes or all attributes if none provided.
         let attributes: string | string[] = defaultTo(attribute, keys(this._attributes));
@@ -595,7 +633,7 @@ class Model extends Base {
         // Unset either specific attributes or all attributes if none provided.
         each(castArray(attributes), (attribute): void => {
             if (this.has(attribute)) {
-                Vue.set(this._attributes, attribute, get(defaults, attribute));
+                this._attributes[attribute] = get(defaults, attribute);
             }
         });
     }
@@ -787,8 +825,8 @@ class Model extends Base {
 
         this.assign(attributes as Record<string, any>);
 
-        Vue.set(this, 'fatal',   false);
-        Vue.set(this, 'loading', false);
+        this.fatal   = false;
+        this.loading = false;
 
         this.emit('fetch', {error: null});
     }
@@ -799,8 +837,8 @@ class Model extends Base {
      * @param {Error}  error
      */
     onFetchFailure(error: any): void {
-        Vue.set(this, 'fatal',   true);
-        Vue.set(this, 'loading', false);
+        this.fatal   = true;
+        this.loading = false;
 
         this.emit('fetch', {error});
     }
@@ -966,9 +1004,9 @@ class Model extends Base {
      */
     setAttributeErrors(attribute: string, errors?: string | string[] | ValidationResultError[]): void {
         if (isEmpty(errors)) {
-            Vue.delete(this._errors, attribute);
+            delete this._errors[attribute];
         } else {
-            Vue.set(this._errors, attribute, castArray(errors));
+            this._errors[attribute] = castArray(errors) as string[];
         }
     }
 
@@ -979,7 +1017,7 @@ class Model extends Base {
      */
     setErrors(errors?: Record<string, string | string[]>): void {
         if (isEmpty(errors)) {
-            Vue.set(this, '_errors', {});
+            replaceReactive(this._errors, {});
             return;
         }
 
@@ -1004,7 +1042,7 @@ class Model extends Base {
      */
     clearErrors(): void {
         this.setErrors({});
-        Vue.set(this, 'fatal', false);
+        this.fatal = false;
     }
 
     /**
@@ -1032,8 +1070,8 @@ class Model extends Base {
             this.update(responseData);
         }
 
-        Vue.set(this, 'saving', false);
-        Vue.set(this, 'fatal',  false);
+        this.saving = false;
+        this.fatal  = false;
 
         // Automatically add to all registered collections.
         this.addToAllCollections();
@@ -1059,8 +1097,8 @@ class Model extends Base {
 
         this.setErrors(errors as Record<string, any>);
 
-        Vue.set(this, 'fatal',  false);
-        Vue.set(this, 'saving', false);
+        this.fatal  = false;
+        this.saving = false;
     }
 
     /**
@@ -1073,8 +1111,8 @@ class Model extends Base {
     onFatalSaveFailure(error: any, response: Response | undefined): void {
         this.clearErrors();
 
-        Vue.set(this, 'fatal',  true);
-        Vue.set(this, 'saving', false);
+        this.fatal  = true;
+        this.saving = false;
     }
 
     /**
@@ -1100,8 +1138,8 @@ class Model extends Base {
         this.clear();
         this.removeFromAllCollections();
 
-        Vue.set(this, 'deleting', false);
-        Vue.set(this, 'fatal',    false);
+        this.deleting = false;
+        this.fatal    = false;
 
         this.emit('delete', {error: null});
     }
@@ -1112,8 +1150,8 @@ class Model extends Base {
      * @param {Error}  error
      */
     onDeleteFailure(error: any): void {
-        Vue.set(this, 'deleting', false);
-        Vue.set(this, 'fatal',    true);
+        this.deleting = false;
+        this.fatal    = true;
 
         this.emit('delete', {error});
     }
@@ -1131,7 +1169,7 @@ class Model extends Base {
                 return resolve(Base.REQUEST_SKIP);
             }
 
-            Vue.set(this, 'loading', true);
+            this.loading = true;
             return resolve(Base.REQUEST_CONTINUE);
         });
     }
@@ -1174,7 +1212,7 @@ class Model extends Base {
                 return resolve(Base.REQUEST_REDUNDANT);
             }
 
-            Vue.set(this, 'saving', true);
+            this.saving = true;
 
             // Mutate attribute before we save if required to do so.
             if (this.getOption('mutateBeforeSave')) {
@@ -1186,7 +1224,7 @@ class Model extends Base {
                     return resolve(Base.REQUEST_CONTINUE);
                 }
 
-                Vue.set(this, 'saving', false);
+                this.saving = false;
                 return reject(this.createValidationError(this.errors));
             });
         });
@@ -1203,7 +1241,7 @@ class Model extends Base {
         }
 
         return new Promise((resolve): void => {
-            Vue.set(this, 'deleting', true);
+            this.deleting = true;
             resolve(Base.REQUEST_CONTINUE);
         });
     }
