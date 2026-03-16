@@ -1,14 +1,14 @@
 import get from 'lodash/get'
 import { AxiosResponse } from 'axios';
 
-class Response {
-    response?: AxiosResponse;
+class Response<T = any> {
+    response?: AxiosResponse<T>;
 
-    constructor(response?: AxiosResponse) {
+    constructor(response?: AxiosResponse<T>) {
         this.response = response;
     }
 
-    getData(): any | null {
+    getData(): T | null {
         return get(this.response, 'data', null);
     }
 
@@ -21,7 +21,7 @@ class Response {
     }
 
     getValidationErrors(): Record<string, any> | null {
-        return get(this.response, 'data', null);
+        return get(this.response, 'data', null) as Record<string, any> | null;
     }
 }
 

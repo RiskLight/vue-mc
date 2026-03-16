@@ -59,8 +59,8 @@ const replaceReactive = function(target: Record<string, any>, source: Record<str
     Object.assign(target, source);
 };
 
-class Collection extends Base {
-    private _models!: Model[];
+class Collection<M extends Model = Model> extends Base {
+    private _models!: M[];
     private _loading!: ShallowRef<boolean>;
     private _saving!: ShallowRef<boolean>;
     private _deleting!: ShallowRef<boolean>;
@@ -69,8 +69,8 @@ class Collection extends Base {
     private _page!: number | null;
     private _registry!: Record<string, string>;
 
-    get models(): Model[] { return this._models; }
-    set models(value: Model[]) { this._models.splice(0, this._models.length, ...value); }
+    get models(): M[] { return this._models; }
+    set models(value: M[]) { this._models.splice(0, this._models.length, ...value); }
 
     get loading(): boolean { return this._loading.value; }
     set loading(value: boolean) { this._loading.value = value; }
@@ -395,8 +395,8 @@ class Collection extends Base {
         }
 
         // Add the model instance to this collection.
-        this.models.push(model as Model);
-        this.onAdd(model as Model);
+        this.models.push(model as M);
+        this.onAdd(model as M);
 
         // We're assuming that the collection is not loading once a model is added.
         this.loading = false;
@@ -524,7 +524,7 @@ class Collection extends Base {
             filter = {_uid: model._uid};
         }
 
-        return findIndex(this.models, filter);
+        return findIndex(this.models as Model[], filter);
     }
 
     /**
