@@ -23,6 +23,29 @@
         "src/**/*.d.ts"
     ],
     "types": "src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "import": "./vue-mc.es.js",
+            "require": "./vue-mc.js"
+        },
+        "./validation": {
+            "types": "./src/Validation/index.d.ts",
+            "import": "./validation/index.js",
+            "require": "./validation/index.js"
+        },
+        "./validation/locale": {
+            "types": "./src/Validation/locale.d.ts",
+            "import": "./validation/locale.js",
+            "require": "./validation/locale.js"
+        }
+    },
+    "typesVersions": {
+        "*": {
+            "validation": ["./src/Validation/index.d.ts"],
+            "validation/locale": ["./src/Validation/locale.d.ts"]
+        }
+    },
     "bugs": {
         "url": "https://github.com/FiguredLimited/vue-mc/issues"
     },
