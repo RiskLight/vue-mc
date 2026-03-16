@@ -864,7 +864,7 @@ class Collection extends Base {
      * @param  {integer} status Response status
      */
     applyValidationErrorObject(errors: Record<string, Record<string, string | string[]>>): void {
-        let lookup: Record<string, Model> = keyBy(this.models, (model): string => model.identifier());
+        let lookup: Record<string, Model> = keyBy(this.models, (model) => String(model.identifier()));
 
         each(errors, (errors, identifier): void => {
             let model: Model = get(lookup, identifier);

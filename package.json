@@ -5,6 +5,7 @@
     "license": "MIT",
     "main": "vue-mc.js",
     "module": "vue-mc.es.js",
+    "type": "module",
     "keywords": [
         "vue",
         "collection",
@@ -18,7 +19,8 @@
     "files": [
         "validation",
         "vue-mc.js",
-        "vue-mc.es.js"
+        "vue-mc.es.js",
+        "src/**/*.d.ts"
     ],
     "types": "src/index.d.ts",
     "bugs": {

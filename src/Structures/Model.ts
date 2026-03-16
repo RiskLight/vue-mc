@@ -103,7 +103,7 @@ const replaceReactive = function(target: Record<string, any>, source: Record<str
 /**
  * Base model class.
  */
-class Model extends Base {
+class Model<A extends Record<string, any> = Record<string, any>> extends Base {
     [key: string]: any;
 
     private _loading!: ShallowRef<boolean>;
@@ -137,15 +137,15 @@ class Model extends Base {
      *
      * @returns {Object} This model's saved, reference data.
      */
-    get $(): Record<string, any> {
-        return this._reference;
+    get $(): Partial<A> & Record<string, any> {
+        return this._reference as Partial<A> & Record<string, any>;
     }
 
     /**
      * @returns {Object} This model's "active" state attributes.
      */
-    get attributes(): Record<string, any> {
-        return this._attributes;
+    get attributes(): A & Record<string, any> {
+        return this._attributes as A & Record<string, any>;
     }
 
     /**
@@ -169,7 +169,7 @@ class Model extends Base {
      * @param  {Collection} [collection]  Collection that this model belongs to.
      * @param  {Object}     [options]     Options to set on the model.
      */
-    constructor(attributes = {}, collection: Collection | null = null, options = {}) {
+    constructor(attributes: Partial<A> | Record<string, any> = {}, collection: Collection | null = null, options: Record<string, any> = {}) {
         super(options);
 
         this._collections = reactive({});  // Collections that contain this model.
@@ -210,7 +210,7 @@ class Model extends Base {
      *
      * @returns {Model}
      */
-    clone(): Model {
+    clone(): this {
         let attributes: Record<string, any> = {};
         let reference: Record<string, any>  = {};
 
@@ -219,7 +219,7 @@ class Model extends Base {
         copyFrom(this._reference, reference);
 
         // Create a copy.
-        let clone: Model = new (this.constructor as typeof Model)();
+        let clone = new (this.constructor as new () => this)();
 
         // Make sure that the clone belongs to the same collections.
         clone.registerCollection(this.collections);
@@ -252,7 +252,7 @@ class Model extends Base {
     /**
      * Returns the model's identifier value.
      */
-    identifier(): string {
+    identifier(): string | number | null | undefined {
         return this.saved(this.getOption('identifier'));
     }
 
@@ -261,7 +261,7 @@ class Model extends Base {
      *                   It's important that all model attributes have a default
      *                   value in order to be reactive in Vue.
      */
-    defaults(): Record<string, any> {
+    defaults(): Partial<A> {
         return {};
     }
 
@@ -434,7 +434,7 @@ class Model extends Base {
      *
      * @returns {Object} The attributes that were assigned to the model.
      */
-    assign(attributes: Record<string, any>): void {
+    assign(attributes: Partial<A> | Record<string, any>): void {
         let defaultsCopy: Record<string, any> = {};
         copyFrom(this.defaults(), defaultsCopy);
         this.set(defaults({}, attributes, defaultsCopy));
@@ -566,7 +566,9 @@ class Model extends Base {
      *
      * @returns {*} The value that was set.
      */
-    set<T = any>(attribute: string | Record<string, any>, value?: T): T | undefined {
+    set<K extends keyof A>(attribute: K, value: A[K]): A[K];
+    set(attribute: string | Record<string, any>, value?: any): any;
+    set(attribute: string | Record<string, any>, value?: any): any {
 
         // Allow batch set of multiple attributes at once, ie. set({...});
         if (isPlainObject(attribute)) {
@@ -647,6 +649,8 @@ class Model extends Base {
      *
      * @returns {*} The value of the attribute or `fallback` if not found.
      */
+    get<K extends keyof A>(attribute: K, fallback?: A[K]): A[K];
+    get(attribute: string, fallback?: any): any;
     get(attribute: string, fallback?: any): any {
         return get(this._attributes, attribute, fallback);
     }
@@ -664,6 +668,8 @@ class Model extends Base {
      *
      * @returns {*} The value of the attribute or `fallback` if not found.
      */
+    saved<K extends keyof A>(attribute: K, fallback?: A[K]): A[K] | undefined;
+    saved(attribute: string, fallback?: any): any;
     saved(attribute: string, fallback?: any): any {
         return get(this._reference, attribute, fallback);
     }
@@ -973,7 +979,7 @@ class Model extends Base {
             if (this.isValidIdentifier(identifier)) {
 
                 // The current identifier of this model.
-                let current: string = this.identifier();
+                let current = this.identifier();
 
                 // If an identifier already exists on this model and the returned
                 // identifier is not the same, this almost definitely indicates
@@ -1249,7 +1255,7 @@ class Model extends Base {
 
 export default Model;
 
-interface ModelOptions extends Options {
+export interface ModelOptions extends Options {
     [key: string]: any;
 
     methods?: Record<string, HttpMethods>;
