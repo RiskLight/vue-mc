@@ -139,7 +139,7 @@ class Collection<M extends Model = Model> extends Base {
     /**
      * @return {Model} The class/constructor for this collection's model type.
      */
-    model(): typeof Model {
+    model(): new (...args: any[]) => M {
         return this.getOption('model');
     }
 
