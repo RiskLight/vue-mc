@@ -51,12 +51,12 @@
         }
     },
     "bugs": {
-        "url": "https://github.com/FiguredLimited/vue-mc/issues"
+        "url": "https://github.com/RiskLight/vue-mc/issues"
     },
-    "homepage": "https://github.com/FiguredLimited/vue-mc",
+    "homepage": "https://github.com/RiskLight/vue-mc",
     "repository": {
         "type": "git",
-        "url": "https://github.com/FiguredLimited/vue-mc.git"
+        "url": "https://github.com/RiskLight/vue-mc.git"
     },
     "author": {
         "name": "Rudi Theunissen",
