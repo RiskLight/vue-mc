@@ -1,8 +1,0 @@
-/.idea
-/database/database.sqlite
-/node_modules
-/public/js
-/public/mix-manifest.json
-/vendor
-Homestead.json
-Homestead.yaml

@@ -1,4 +1,5 @@
 import moxios from 'moxios'
+import axios from 'axios'
 import {assert, expect} from 'chai'
 import {Model, Collection} from '../../src/index'
 import ValidationError  from '../../src/Errors/ValidationError'
@@ -22,13 +23,16 @@ moxios.delay = 10;
 
 /**
  * Checks that a request was skipped.
+ * Returns a Promise that resolves if the request was skipped, rejects otherwise.
  */
-function expectRequestToBeSkipped(request, done) {
-    let error = new Error("Request was not skipped");
-    let delay = 2;
+function expectRequestToBeSkipped(request) {
+    return new Promise((resolve, reject) => {
+        let error = new Error("Request was not skipped");
+        let delay = 2;
 
-    request.then(() => done(error)).catch(() => done(error));
-    _.delay(done, delay);
+        request.then(() => reject(error)).catch(() => reject(error));
+        _.delay(resolve, delay);
+    });
 }
 
 /**
@@ -37,26 +41,25 @@ function expectRequestToBeSkipped(request, done) {
 describe('Model', () => {
 
     beforeEach(function () {
-      moxios.install()
+      moxios.install(axios)
     })
 
     afterEach(function () {
-      moxios.uninstall()
+      moxios.uninstall(axios)
     })
 
     describe('autobind', () => {
-        it('should not invoke getters and setters when instantiated', (done) => {
+        it('should not invoke getters and setters when instantiated', () => {
             let M = class extends Model {
                 get test() {
-                    done(new Error('Should not invoke getter'));
+                    throw new Error('Should not invoke getter');
                 }
                 set test(value) {
-                    done(new Error('Should not invoke setter'));
+                    throw new Error('Should not invoke setter');
                 }
             }
 
             let m = new M();
-            done();
         })
     })
 
@@ -230,11 +233,13 @@ describe('Model', () => {
     })
 
     describe('routes', () => {
-        it('should fail when accessing a non-existing route', (done) => {
-            (new Model()).save().catch((error) => {
-                expect(error.message).to.equal('Invalid or missing route');
-                done();
-            });
+        it('should fail when accessing a non-existing route', () => {
+            return new Promise((resolve, reject) => {
+                (new Model()).save().catch((error) => {
+                    expect(error.message).to.equal('Invalid or missing route');
+                    resolve();
+                });
+            })
         })
     })
 
@@ -430,444 +435,474 @@ describe('Model', () => {
 
     describe('validate', () => {
 
-        it('should validate a nested model', (done) => {
-            let validated = false;
+        it('should validate a nested model', () => {
+            return new Promise((resolve, reject) => {
+                let validated = false;
 
-            let inner = new class extends Model {
-                defaults() {
-                    return {
-                        a: 1,
-                    }
-                }
-                validate() {
-                    // Mark that we've validated this model.
-                    validated = true;
-                    return super.validate();
-                }
-                validation() {
-                    return {
-                        a: email,
-                    }
-                }
-            }
-
-            let outer = new Model({inner});
-
-            outer.validate().then((errors) => {
-                expect(validated).to.equal(true);
-                expect(errors).to.deep.equal({
-                    inner: [{
-                        a: ['Must be a valid email address']
-                    }]
-                });
-                expect(inner.errors).to.deep.equal({a: ['Must be a valid email address']});
-                done();
-            });
-        })
-
-        it('should fail if a nested model fails its validation', (done) => {
-            let inner = new class extends Model {
-                defaults() {
-                    return {a: 1}
-                }
-                validation() {
-                    return {a: email}
-                }
-            }
-
-            let outer = new Model({inner});
-
-            outer.validate().then((errors) => {
-                expect(errors).to.deep.equal({
-                    inner: [{
-                        a: ['Must be a valid email address']
-                    }]
-                });
-                expect(outer.inner.errors).to.deep.equal({a: ['Must be a valid email address']});
-                done();
-            })
-        })
-
-        it('should not validate a nested model if option is disabled', (done) => {
-            let validated = false;
-
-            let inner = new class extends Model {
-                defaults() {
-                    return {
-                        a: 1,
-                    }
-                }
-                validate() {
-                    validated = true;
-                    return super.validate();
-                }
-                validation() {
-                    return {
-                        a: email,
-                    }
-                }
-            }
-
-            let outer = new Model({inner});
-            outer.setOption('validateRecursively', false);
-
-            outer.validate().then((errors) => {
-                expect(errors).to.be.empty;
-                expect(outer.errors).to.be.empty;
-                expect(inner.errors).to.be.empty;
-                expect(validated).to.equal(false);
-                done();
-            });
-        })
-
-        it('should validate collections recursively with a mix of valid and invalid models', (done) => {
-            const InvalidModel = class extends Model {
-                defaults()   { return {a: 1} }
-                validation() { return {a: email} }
-            }
-            const ValidModel = class extends Model {
-                defaults()   { return {y: 1} }
-                validation() { return {} }
-            }
-
-            // A collection of some valid and some invalid models.
-            let c = new Collection([
-                new ValidModel,
-                new ValidModel,
-                new InvalidModel,
-            ]);
-
-            // A model that has an invalid property and an invalid nested validator.
-            let m = new class extends Model {
-                defaults() {
-                    return {
-                        x: 1,
-                        c: c,
-                    }
-                }
-                validation() {
-                    return {
-                        x: email,
-                    }
-                }
-            }
-
-            m.setOption('validateRecursively', true);
-            m.setOption('useFirstErrorOnly',   false);
-
-            m.validate().then((errors) => {
-                expect(errors).to.deep.equal({
-                    "c": [
-                        {},
-                        {},
-                        {
-                            "a": [
-                                "Must be a valid email address",
-                            ]
+                let inner = new class extends Model {
+                    defaults() {
+                        return {
+                            a: 1,
                         }
-                    ],
-                    "x": [
-                        "Must be a valid email address",
-                    ]
+                    }
+                    validate() {
+                        // Mark that we've validated this model.
+                        validated = true;
+                        return super.validate();
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                        }
+                    }
+                }
+
+                let outer = new Model({inner});
+
+                outer.validate().then((errors) => {
+                    expect(validated).to.equal(true);
+                    expect(errors).to.deep.equal({
+                        inner: [{
+                            a: ['Must be a valid email address']
+                        }]
+                    });
+                    expect(inner.errors).to.deep.equal({a: ['Must be a valid email address']});
+                    resolve();
                 });
-
-                done();
             })
         })
 
-        it('should validate collections recursively without errors if a nested collection has only valid models', (done) => {
-            const ValidModel = class extends Model {
-                defaults()   { return {a: 1} }
-            }
-
-            // A collection of some valid and some invalid models.
-            let c = new Collection([
-                new ValidModel,
-                new ValidModel,
-            ]);
-
-            // A model that has a nested, valid collection.
-            let m = new class extends Model {
-                defaults() {
-                    return { c }
+        it('should fail if a nested model fails its validation', () => {
+            return new Promise((resolve, reject) => {
+                let inner = new class extends Model {
+                    defaults() {
+                        return {a: 1}
+                    }
+                    validation() {
+                        return {a: email}
+                    }
                 }
-            }
 
-            m.setOption('validateRecursively', true);
-            m.setOption('useFirstErrorOnly',   false);
+                let outer = new Model({inner});
 
-            m.validate().then((errors) => {
-                expect(errors).to.deep.equal({});
-                done();
+                outer.validate().then((errors) => {
+                    expect(errors).to.deep.equal({
+                        inner: [{
+                            a: ['Must be a valid email address']
+                        }]
+                    });
+                    expect(outer.inner.errors).to.deep.equal({a: ['Must be a valid email address']});
+                    resolve();
+                })
             })
         })
 
-        it('should throw if `false` is given as attribute', (done) => {
-            let m = new class extends Model {
-                defaults() {
-                    return {
-                        a: 5,
-                    }
-                }
-                validation() {
-                    return {
-                        a: email,
-                    }
-                }
-            }
+        it('should not validate a nested model if option is disabled', () => {
+            return new Promise((resolve, reject) => {
+                let validated = false;
 
-            m.validate(false).then(() => {
-                done('Promise should not have been resolved');
-            }).catch((error) => {
-                expect(error.message).to.equal('Invalid argument for validation attributes');
-                done();
+                let inner = new class extends Model {
+                    defaults() {
+                        return {
+                            a: 1,
+                        }
+                    }
+                    validate() {
+                        validated = true;
+                        return super.validate();
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                        }
+                    }
+                }
+
+                let outer = new Model({inner});
+                outer.setOption('validateRecursively', false);
+
+                outer.validate().then((errors) => {
+                    expect(errors).to.be.empty;
+                    expect(outer.errors).to.be.empty;
+                    expect(inner.errors).to.be.empty;
+                    expect(validated).to.equal(false);
+                    resolve();
+                });
             })
         })
 
-        it('should throw if undefined attribute is given', (done) => {
-            let m = new class extends Model {
-                defaults() {
-                    return {
-                        a: 5,
+        it('should validate collections recursively with a mix of valid and invalid models', () => {
+            return new Promise((resolve, reject) => {
+                const InvalidModel = class extends Model {
+                    defaults()   { return {a: 1} }
+                    validation() { return {a: email} }
+                }
+                const ValidModel = class extends Model {
+                    defaults()   { return {y: 1} }
+                    validation() { return {} }
+                }
+
+                // A collection of some valid and some invalid models.
+                let c = new Collection([
+                    new ValidModel,
+                    new ValidModel,
+                    new InvalidModel,
+                ]);
+
+                // A model that has an invalid property and an invalid nested validator.
+                let m = new class extends Model {
+                    defaults() {
+                        return {
+                            x: 1,
+                            c: c,
+                        }
+                    }
+                    validation() {
+                        return {
+                            x: email,
+                        }
                     }
                 }
-                validation() {
-                    return {
-                        a: email,
-                    }
-                }
-            }
 
-            m.validate('b').then(() => {
-                done('Promise should not have been resolved');
-            }).catch((error) => {
-                expect(error.message).to.equal("'b' is not defined");
-                done();
-            })
-        })
-
-        it('should validate a single attribute', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: false,
-                    }
-                }
-                validation() {
-                    return {
-                        a: email,
-                        b: numeric,
-                    }
-                }
-            }({a: 'not_an_email', b: 'not_numeric'});
-
-            expect(m.errors).to.be.empty;
-
-            m.validate('a').then((errors) => {
-                expect(errors).to.deep.equal({a: ['Must be a valid email address']});
-                expect(m.errors).to.deep.equal(errors);
-                done();
-            });
-        })
-
-        it('should honour the `useFirstErrorOnly` option', (done) => {
-            let m = new class extends Model {
-                validation() {
-                    return {
-                        a: [email, numeric],
-                    }
-                }
-            }({a: 'not_an_email_or_numeric'});
-
-            m.setOption('useFirstErrorOnly', false);
-            m.validate().then((errors) => {
-                expect(m.errors.a).to.have.lengthOf(2);
-                expect(m._errors.a).to.have.lengthOf(2);
-                expect(errors.a).to.have.lengthOf(2);
-
-            }).then(() => {
-                m.setOption('useFirstErrorOnly', true);
-                expect(m.errors.a).to.be.a('string');
-                expect(m._errors.a).to.have.lengthOf(2); // internal
+                m.setOption('validateRecursively', true);
+                m.setOption('useFirstErrorOnly',   false);
 
                 m.validate().then((errors) => {
+                    expect(errors).to.deep.equal({
+                        "c": [
+                            {},
+                            {},
+                            {
+                                "a": [
+                                    "Must be a valid email address",
+                                ]
+                            }
+                        ],
+                        "x": [
+                            "Must be a valid email address",
+                        ]
+                    });
+
+                    resolve();
+                })
+            })
+        })
+
+        it('should validate collections recursively without errors if a nested collection has only valid models', () => {
+            return new Promise((resolve, reject) => {
+                const ValidModel = class extends Model {
+                    defaults()   { return {a: 1} }
+                }
+
+                // A collection of some valid and some invalid models.
+                let c = new Collection([
+                    new ValidModel,
+                    new ValidModel,
+                ]);
+
+                // A model that has a nested, valid collection.
+                let m = new class extends Model {
+                    defaults() {
+                        return { c }
+                    }
+                }
+
+                m.setOption('validateRecursively', true);
+                m.setOption('useFirstErrorOnly',   false);
+
+                m.validate().then((errors) => {
+                    expect(errors).to.deep.equal({});
+                    resolve();
+                })
+            })
+        })
+
+        it('should throw if `false` is given as attribute', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() {
+                        return {
+                            a: 5,
+                        }
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                        }
+                    }
+                }
+
+                m.validate(false).then(() => {
+                    reject('Promise should not have been resolved');
+                }).catch((error) => {
+                    expect(error.message).to.equal('Invalid argument for validation attributes');
+                    resolve();
+                })
+            })
+        })
+
+        it('should throw if undefined attribute is given', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() {
+                        return {
+                            a: 5,
+                        }
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                        }
+                    }
+                }
+
+                m.validate('b').then(() => {
+                    reject('Promise should not have been resolved');
+                }).catch((error) => {
+                    expect(error.message).to.equal("'b' is not defined");
+                    resolve();
+                })
+            })
+        })
+
+        it('should validate a single attribute', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: false,
+                        }
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                            b: numeric,
+                        }
+                    }
+                }({a: 'not_an_email', b: 'not_numeric'});
+
+                expect(m.errors).to.be.empty;
+
+                m.validate('a').then((errors) => {
+                    expect(errors).to.deep.equal({a: ['Must be a valid email address']});
+                    expect(m.errors).to.deep.equal(errors);
+                    resolve();
+                });
+            })
+        })
+
+        it('should honour the `useFirstErrorOnly` option', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    validation() {
+                        return {
+                            a: [email, numeric],
+                        }
+                    }
+                }({a: 'not_an_email_or_numeric'});
+
+                m.setOption('useFirstErrorOnly', false);
+                m.validate().then((errors) => {
+                    expect(m.errors.a).to.have.lengthOf(2);
+                    expect(m._errors.a).to.have.lengthOf(2);
+                    expect(errors.a).to.have.lengthOf(2);
+
+                }).then(() => {
+                    m.setOption('useFirstErrorOnly', true);
                     expect(m.errors.a).to.be.a('string');
-                    expect(errors.a).to.be.a('string');
                     expect(m._errors.a).to.have.lengthOf(2); // internal
 
-                    done();
+                    m.validate().then((errors) => {
+                        expect(m.errors.a).to.be.a('string');
+                        expect(errors.a).to.be.a('string');
+                        expect(m._errors.a).to.have.lengthOf(2); // internal
+
+                        resolve();
+                    })
                 })
             })
         })
 
-        it('should validate a single attribute that passes', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: false,
+        it('should validate a single attribute that passes', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: false,
+                        }
                     }
-                }
-                validation() {
-                    return {
-                        a: email,
-                        b: numeric,
+                    validation() {
+                        return {
+                            a: email,
+                            b: numeric,
+                        }
                     }
-                }
-            }({a: 'not_an_email', b: 5});
+                }({a: 'not_an_email', b: 5});
 
-            expect(m.errors).to.be.empty;
+                expect(m.errors).to.be.empty;
 
-            m.validate('b').then((errors) => {
-                expect(errors).to.be.empty;
-                expect(m.errors).to.deep.equal({});
+                m.validate('b').then((errors) => {
+                    expect(errors).to.be.empty;
+                    expect(m.errors).to.deep.equal({});
+
+                    m.validate().then((errors) => {
+                        expect(errors).to.not.be.empty;
+                        expect(m.errors).to.deep.equal({
+                            a: ["Must be a valid email address"],
+                        });
+                        resolve();
+                    });
+                });
+
+
+            })
+        })
+
+        it('should fail when validating an attribute that does not exist', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: false,
+                        }
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                            b: numeric,
+                        }
+                    }
+                }({a: 'not_an_email', b: 'not_numeric'});
+
+                expect(m.errors).to.be.empty;
+
+                m.validate('c').then((errors) => {
+                    reject('Promise should not have been resolved');
+                }).catch((error) => {
+                    expect(error.message).to.equal("'c' is not defined");
+                    resolve();
+                })
+            })
+        })
+
+        it('should validate an array of attributes', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: false,
+                        }
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                            b: numeric,
+                            c: numeric,
+                        }
+                    }
+                }({
+                    a: 'not_an_email',
+                    b: 'not_numeric',
+                    c: 'not_numeric',
+                });
+
+                expect(m.errors).to.be.empty;
+
+                m.validate(['a', 'c']).then((errors) => {
+                    expect(Object.keys(errors)).to.deep.equal(["a", "c"]);
+                    expect(Object.keys(m.errors)).to.deep.equal(["a", "c"]);
+                    expect(Object.keys(m._errors)).to.deep.equal(["a", "c"]);
+                    resolve();
+                });
+            })
+        })
+
+        it('should validate all attributes if none given', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: false,
+                        }
+                    }
+                    validation() {
+                        return {
+                            a: email,
+                            b: numeric,
+                        }
+                    }
+                }({a: 'not_an_email', b: 'not_numeric'});
+
+                expect(m.errors).to.be.empty;
 
                 m.validate().then((errors) => {
-                    expect(errors).to.not.be.empty;
-                    expect(m.errors).to.deep.equal({
-                        a: ["Must be a valid email address"],
-                    });
-                    done();
+                    expect(Object.keys(errors)).to.deep.equal(["a", "b"]);
+                    expect(Object.keys(m.errors)).to.deep.equal(["a", "b"]);
+                    expect(Object.keys(m._errors)).to.deep.equal(["a", "b"]);
+                    resolve();
                 });
-            });
-
-
-        })
-
-        it('should fail when validating an attribute that does not exist', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: false,
-                    }
-                }
-                validation() {
-                    return {
-                        a: email,
-                        b: numeric,
-                    }
-                }
-            }({a: 'not_an_email', b: 'not_numeric'});
-
-            expect(m.errors).to.be.empty;
-
-            m.validate('c').then((errors) => {
-                done('Promise should not have been resolved');
-            }).catch((error) => {
-                expect(error.message).to.equal("'c' is not defined");
-                done();
             })
         })
 
-        it('should validate an array of attributes', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: false,
+        it('should validate the documentation example', () => {
+            return new Promise((resolve, reject) => {
+                let Task = class extends Model {
+                    defaults() {
+                        return {
+                            id:   null,
+                            name: '',
+                            done: false,
+                        }
+                    }
+                    validation() {
+                        return {
+                            id:   integer.and(min(1)).or(equal(null)),
+                            name: string.and(required),
+                            done: boolean,
+                        }
                     }
                 }
-                validation() {
-                    return {
-                        a: email,
-                        b: numeric,
-                        c: numeric,
-                    }
-                }
-            }({
-                a: 'not_an_email',
-                b: 'not_numeric',
-                c: 'not_numeric',
-            });
 
-            expect(m.errors).to.be.empty;
+                let task = new Task();
+                expect(task.errors).to.be.empty;
 
-            m.validate(['a', 'c']).then((errors) => {
-                expect(Object.keys(errors)).to.deep.equal(["a", "c"]);
-                expect(Object.keys(m.errors)).to.deep.equal(["a", "c"]);
-                expect(Object.keys(m._errors)).to.deep.equal(["a", "c"]);
-                done();
-            });
-        })
-
-        it('should validate all attributes if none given', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: false,
-                    }
-                }
-                validation() {
-                    return {
-                        a: email,
-                        b: numeric,
-                    }
-                }
-            }({a: 'not_an_email', b: 'not_numeric'});
-
-            expect(m.errors).to.be.empty;
-
-            m.validate().then((errors) => {
-                expect(Object.keys(errors)).to.deep.equal(["a", "b"]);
-                expect(Object.keys(m.errors)).to.deep.equal(["a", "b"]);
-                expect(Object.keys(m._errors)).to.deep.equal(["a", "b"]);
-                done();
-            });
-        })
-
-        it('should validate the documentation example', (done) => {
-            let Task = class extends Model {
-                defaults() {
-                    return {
-                        id:   null,
-                        name: '',
-                        done: false,
-                    }
-                }
-                validation() {
-                    return {
-                        id:   integer.and(min(1)).or(equal(null)),
-                        name: string.and(required),
-                        done: boolean,
-                    }
-                }
-            }
-
-            let task = new Task();
-            expect(task.errors).to.be.empty;
-
-            task.validate().then((errors) => {
-                expect(errors).to.deep.equal({"name": ["Required"]});
-                expect(task.errors).to.deep.equal({"name": ["Required"]});
-                expect(task._errors).to.deep.equal({"name": ["Required"]});
-
-                task.set({name: 'Example'});
                 task.validate().then((errors) => {
-                    expect(errors).to.be.empty;
-                    expect(task.errors).to.be.empty;
-                    expect(task._errors).to.be.empty;
+                    expect(errors).to.deep.equal({"name": ["Required"]});
+                    expect(task.errors).to.deep.equal({"name": ["Required"]});
+                    expect(task._errors).to.deep.equal({"name": ["Required"]});
 
-                    done();
-                })
-            });
+                    task.set({name: 'Example'});
+                    task.validate().then((errors) => {
+                        expect(errors).to.be.empty;
+                        expect(task.errors).to.be.empty;
+                        expect(task._errors).to.be.empty;
+
+                        resolve();
+                    })
+                });
+            })
         })
 
-        it('should pass the attribute name to the message context', (done) => {
-            let m = new class extends Model {
-                defaults() {
-                    return {
-                        name: '',
+        it('should pass the attribute name to the message context', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() {
+                        return {
+                            name: '',
+                        }
+                    }
+                    validation() {
+                        return {
+                            name: string.format("Can ${attribute} be a string, please?"),
+                        }
                     }
                 }
-                validation() {
-                    return {
-                        name: string.format("Can ${attribute} be a string, please?"),
-                    }
-                }
-            }
 
-            m.name = 5;
-            m.validate().then((errors) => {
-                expect(m.errors).to.deep.equal({"name": ["Can name be a string, please?"]});
-                done();
+                m.name = 5;
+                m.validate().then((errors) => {
+                    expect(m.errors).to.deep.equal({"name": ["Can name be a string, please?"]});
+                    resolve();
+                })
             })
         })
     })
@@ -952,18 +987,20 @@ describe('Model', () => {
             expect(m.a).to.equal('10');
         })
 
-        it('should emit a change event when a value has changed', (done) => {
+        it('should emit a change event when a value has changed', () => {
             let m = new Model({a: 1});
+            let called = false;
 
             m.on('change', function(e) {
                 expect(e.target).to.equal(m);
                 expect(e.previous).to.equal(1);
                 expect(e.value).to.equal(5);
                 expect(m.a).to.equal(5);
-                done();
+                called = true;
             });
 
             m.set('a', 5);
+            expect(called).to.equal(true);
         })
 
         it('should not emit a change event when a value is set for the first time', () => {
@@ -976,7 +1013,7 @@ describe('Model', () => {
             m.set('a', 1);
         })
 
-        it('should emit a change event with the mutated value', (done) => {
+        it('should emit a change event with the mutated value', () => {
             let m = new class extends Model {
                 mutations() {
                     return {
@@ -988,15 +1025,17 @@ describe('Model', () => {
                 mutateBeforeSync: false,
             });
 
+            let called = false;
             m.on('change', function(e) {
                 expect(e.target).to.equal(m);
                 expect(e.previous).to.equal(2);
                 expect(e.value).to.equal(10);
                 expect(m.a).to.equal(10);
-                done();
+                called = true;
             });
 
             m.set('a', 5);
+            expect(called).to.equal(true);
         })
 
         it('should not emit a change event when a value has not changed', () => {
@@ -1015,55 +1054,59 @@ describe('Model', () => {
             m.set('a', 1);
         })
 
-        it('should validate an attribute on change if option is enabled', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: true,
+        it('should validate an attribute on change if option is enabled', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: true,
+                        }
                     }
-                }
 
-                validation() {
-                    return {
-                        a: email,
+                    validation() {
+                        return {
+                            a: email,
+                        }
                     }
-                }
-            }({a: 1});
+                }({a: 1});
 
-            m.on('change', function(e) {
-                setTimeout(() => {
-                    expect(m.errors.a).to.deep.equal(['Must be a valid email address']);
-                    done();
-                }, 1);
-            });
+                m.on('change', function(e) {
+                    setTimeout(() => {
+                        expect(m.errors.a).to.deep.equal(['Must be a valid email address']);
+                        resolve();
+                    }, 1);
+                });
 
-            m.set('a', 5);
+                m.set('a', 5);
+            })
         })
 
-        it('should not validate an attribute on change if option disabled', (done) => {
-            let m = new class extends Model {
-                options() {
-                    return {
-                        validateOnChange: false,
+        it('should not validate an attribute on change if option disabled', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    options() {
+                        return {
+                            validateOnChange: false,
+                        }
                     }
-                }
 
-                validation() {
-                    return {
-                        a: email,
+                    validation() {
+                        return {
+                            a: email,
+                        }
                     }
-                }
-            }({a: 1});
+                }({a: 1});
 
-            m.on('change', function(e) {
-                setTimeout(() => {
-                    expect(m.a).to.equal(5);
-                    expect(m.errors).to.be.empty;
-                    done();
-                }, 1);
-            });
+                m.on('change', function(e) {
+                    setTimeout(() => {
+                        expect(m.a).to.equal(5);
+                        expect(m.errors).to.be.empty;
+                        resolve();
+                    }, 1);
+                });
 
-            m.set('a', 5);
+                m.set('a', 5);
+            })
         })
     })
 
@@ -1169,13 +1212,15 @@ describe('Model', () => {
             m.reset();
         })
 
-        it('should emit "reset" on reset', (done) => {
+        it('should emit "reset" on reset', () => {
             let m = new Model();
+            let called = false;
             m.on('reset', () => {
-                done();
+                called = true;
             })
 
             m.reset();
+            expect(called).to.equal(true);
         })
 
         it('should support resetting a specific property', () => {
@@ -1281,13 +1326,15 @@ describe('Model', () => {
             expect(m.$.c).to.equal(7);
         })
 
-        it('should emit "sync" on sync', (done) => {
+        it('should emit "sync" on sync', () => {
             let m = new Model();
+            let called = false;
             m.on('sync', () => {
-                done();
+                called = true;
             })
 
             m.sync();
+            expect(called).to.equal(true);
         })
 
         it('should mutate attributes before sync if option is enabled', () => {
@@ -1637,19 +1684,20 @@ describe('Model', () => {
 
     describe('fetch', () => {
 
-        it('should handle successful fetch with attributes return', (done) => {
-            let M = class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {fetch: '/collection/fetch/{id}'}}
-            }
+        it('should handle successful fetch with attributes return', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {fetch: '/collection/fetch/{id}'}}
+                }
 
-            let m = new M({name: 'John'});
+                let m = new M({name: 'John'});
 
-            moxios.withMock(() => {
+            
                 m.fetch().then((response) => {
                     expect(m.name).to.equal('Fred');
                     expect(m.$.name).to.equal('Fred');
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -1662,21 +1710,23 @@ describe('Model', () => {
                         response: {id: 1, name: 'Fred'}
                     })
                 })
+            
             })
         })
 
-        it('should fail when receiving no data on success', (done) => {
-            let M = class extends Model {
-                defaults() { return {id: 1}}
-                routes()   { return {fetch: '/collection/fetch/{id}'}}
-            }
+        it('should fail when receiving no data on success', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {id: 1}}
+                    routes()   { return {fetch: '/collection/fetch/{id}'}}
+                }
 
-            let m = new M({name: 'John'});
+                let m = new M({name: 'John'});
 
-            moxios.withMock(() => {
+            
                 m.fetch().catch().catch((error) => {
                     expect(error.message).to.equal('No data in fetch response');
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -1684,32 +1734,34 @@ describe('Model', () => {
                         status: 200
                     })
                 })
+            
             })
         })
 
-        it('should skip if already fetching', (done) => {
+        it('should skip if already fetching', () => {
             let m = new class extends Model {
                 routes() { return {fetch: '/collection/fetch/{id}'}}
             }
 
             m.loading = true;
-            expectRequestToBeSkipped(m.fetch(), done);
+            return expectRequestToBeSkipped(m.fetch());
         })
 
-        it('should emit event on success', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 5}}
-                routes() { return {fetch: '/collection/fetch/{id}'}}
-            }({name: 'John'});
+        it('should emit event on success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 5}}
+                    routes() { return {fetch: '/collection/fetch/{id}'}}
+                }({name: 'John'});
 
-            m.on('fetch', (event) => {
-                expect(event.target.id).to.equal(5);
-                expect(event.target.name).to.equal('Fred');
-                expect(event.error).to.be.null;
-                done();
-            })
+                m.on('fetch', (event) => {
+                    expect(event.target.id).to.equal(5);
+                    expect(event.target.name).to.equal('Fred');
+                    expect(event.error).to.be.null;
+                    resolve();
+                })
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
@@ -1720,25 +1772,27 @@ describe('Model', () => {
                         }
                     })
                 })
+            
             })
         })
 
-        it('should emit event on failure', (done) => {
-            let M = class extends Model {
-                defaults() { return {id: null}}
-                routes() { return {fetch: '/collection/fetch/{id}'}}
-            }
+        it('should emit event on failure', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {id: null}}
+                    routes() { return {fetch: '/collection/fetch/{id}'}}
+                }
 
-            let m = new M({id: 5, name: 'John'});
+                let m = new M({id: 5, name: 'John'});
 
-            m.on('fetch', (event) => {
-                expect(event.target.name).to.equal('John');
-                expect(event.target.id).to.equal(5);
-                expect(event.error).to.not.be.null;
-                done();
-            })
+                m.on('fetch', (event) => {
+                    expect(event.target.name).to.equal('John');
+                    expect(event.target.id).to.equal(5);
+                    expect(event.error).to.not.be.null;
+                    resolve();
+                })
 
-            moxios.withMock(() => {
+            
                 m.fetch().catch((error) => {});
 
                 moxios.wait(() => {
@@ -1746,129 +1800,143 @@ describe('Model', () => {
                         status: 500
                     })
                 })
+            
             })
         })
 
-        it('should use fetch route override', (done) => {
-            let M = class extends Model {
-                defaults() { return {id: null}}
-                getFetchRoute() { return '/test/fetch/route/{id}'; }
-            }
+        it('should use fetch route override', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {id: null}}
+                    getFetchRoute() { return '/test/fetch/route/{id}'; }
+                }
 
-            let m = new M({id: 5});
+                let m = new M({id: 5});
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.url).to.equal('/test/fetch/route/5');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use fetch headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-                getFetchHeaders() { return {test: 'yes'} }
-            }
+        it('should use fetch headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                    getFetchHeaders() { return {test: 'yes'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('yes');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use default headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-                getDefaultHeaders() { return {test: 'yes'} }
-            }
+        it('should use default headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                    getDefaultHeaders() { return {test: 'yes'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('yes');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use default headers with fetch headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-                getDefaultHeaders() { return {test: 'yes'} }
-                getFetchHeaders() { return {test: 'no'} }
-            }
+        it('should use default headers with fetch headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                    getDefaultHeaders() { return {test: 'yes'} }
+                    getFetchHeaders() { return {test: 'no'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('no');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use fetch method override', (done) => {
-            let M = class extends Model {
-                defaults() { return {id: null}}
-                routes() { return {fetch: '/collection/fetch/{id}'}}
-                getFetchMethod() { return 'PATCH' }
-            }
+        it('should use fetch method override', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {id: null}}
+                    routes() { return {fetch: '/collection/fetch/{id}'}}
+                    getFetchMethod() { return 'PATCH' }
+                }
 
-            let m = new M({id: 5, name: 'John'});
+                let m = new M({id: 5, name: 'John'});
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.config.method).to.equal('patch');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use fetch query parameters override', (done) => {
-            let M = class extends Model {
-                defaults() { return {id: null}}
-                routes()   { return {fetch: '/collection/fetch/{id}'}}
-                getFetchQuery() { return {a: 1} }
-            }
+        it('should use fetch query parameters override', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {id: null}}
+                    routes()   { return {fetch: '/collection/fetch/{id}'}}
+                    getFetchQuery() { return {a: 1} }
+                }
 
-            let m = new M({id: 5, name: 'John'});
+                let m = new M({id: 5, name: 'John'});
 
-            moxios.withMock(() => {
+            
                 m.fetch();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.url).to.equal('/collection/fetch/5?a=1');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should be fatal on error', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-            }
+        it('should be fatal on error', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch().catch((error) => {
                     expect(m.fatal).to.equal(true);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -1876,18 +1944,20 @@ describe('Model', () => {
                         status: 500
                     })
                 })
+            
             })
         })
 
-        it('should be non-fatal on success', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-            }
+        it('should be non-fatal on success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch().then((response) => {
                     expect(m.fatal).to.equal(false);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -1898,18 +1968,20 @@ describe('Model', () => {
                         }
                     })
                 })
+            
             })
         })
 
-        it('should set loading to true on fetch success', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-            }
+        it('should set loading to true on fetch success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch().then(() => {
                     expect(m.loading).to.equal(false);
-                    done();
+                    resolve();
                 });
                 expect(m.loading).to.equal(true);
 
@@ -1919,18 +1991,20 @@ describe('Model', () => {
                         response: {a: 1},
                     });
                 })
+            
             })
         })
 
-        it('should set loading to false on fetch failure', (done) => {
-            let m = new class extends Model {
-                routes() { return {fetch: '/collection/fetch'}}
-            }
+        it('should set loading to false on fetch failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {fetch: '/collection/fetch'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.fetch().catch((error) => {
                     expect(m.loading).to.equal(false);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -1938,22 +2012,24 @@ describe('Model', () => {
                         status: 500
                     })
                 })
+            
             })
         })
     })
 
     describe('save', () => {
-        it('should always update partially', (done) => {
-            let M = class extends Model {
-                defaults() { return {a: 1, b: 2}}
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should always update partially', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {a: 1, b: 2}}
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            let m = new M();
-            m.a = 3;
-            m.b = 4;
+                let m = new M();
+                m.a = 3;
+                m.b = 4;
 
-            moxios.withMock(() => {
+            
                 expect(m.$.a).to.equal(1);
                 expect(m.$.b).to.equal(2);
 
@@ -1961,7 +2037,7 @@ describe('Model', () => {
                     expect(m.$.a).to.equal(8);  // Updated
                     expect(m.$.b).to.equal(4);  // Not the default
                     expect(m.$.c).to.equal(9);  // Synced as new attribute
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -1973,27 +2049,29 @@ describe('Model', () => {
                         }
                     })
                 })
+            
             })
         })
 
-        it('should handle successful save with empty return', (done) => {
-            let M = class extends Model {
-                defaults() { return {a: 1, b: 2}}
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should handle successful save with empty return', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {a: 1, b: 2}}
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            let m = new M();
-            m.a = 10;
-            m.b = 20;
+                let m = new M();
+                m.a = 10;
+                m.b = 20;
 
-            moxios.withMock(() => {
+            
                 expect(m.$.a).to.equal(1);
                 expect(m.$.b).to.equal(2);
 
                 m.save().then((response) => {
                     expect(m.$.a).to.equal(10);
                     expect(m.$.b).to.equal(20);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2004,20 +2082,22 @@ describe('Model', () => {
                         }
                     })
                 })
+            
             })
         })
 
-        it('should handle successful save with identifier return', (done) => {
-            let M = class extends Model {
-                defaults() { return {a: 1, b: 2}}
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should handle successful save with identifier return', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    defaults() { return {a: 1, b: 2}}
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            let m = new M();
-            m.a = 10;
-            m.b = 20;
+                let m = new M();
+                m.a = 10;
+                m.b = 20;
 
-            moxios.withMock(() => {
+            
                 expect(m.$.a).to.equal(1);
                 expect(m.$.b).to.equal(2);
 
@@ -2028,7 +2108,7 @@ describe('Model', () => {
                     expect(m.$.a).to.equal(10);
                     expect(m.$.b).to.equal(20);
 
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2037,24 +2117,26 @@ describe('Model', () => {
                         response: "5"
                     })
                 })
+            
             })
         })
 
-        it('should handle successful save with custom identifier return', (done) => {
-            let m = new class extends Model {
-                defaults() { return {}}
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should handle successful save with custom identifier return', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {}}
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            m.setOptions({
-                identifier: 'name',
-            })
+                m.setOptions({
+                    identifier: 'name',
+                })
 
-            moxios.withMock(() => {
+            
                 m.save().then((response) => {
                     expect(m.name).to.equal('Test');
                     expect(m.$.name).to.equal('Test');
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2063,20 +2145,22 @@ describe('Model', () => {
                         response: 'Test'
                     })
                 })
+            
             })
         })
 
-        it('should handle successful save with attributes return', (done) => {
-            let m = new class extends Model {
-                defaults() { return {}}
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should handle successful save with attributes return', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {}}
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.save().then((response) => {
                     expect(m.a).to.equal(1);
                     expect(m.$.a).to.equal(1);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2087,20 +2171,22 @@ describe('Model', () => {
                         }
                     })
                 })
+            
             })
         })
 
-        it('should handle successful save with attributes return overriding defaults', (done) => {
-            let m = new class extends Model {
-                defaults() { return {a: 1}}
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should handle successful save with attributes return overriding defaults', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {a: 1}}
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.save().then((response) => {
                     expect(m.a).to.equal(5);
                     expect(m.$.a).to.equal(5);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2111,22 +2197,24 @@ describe('Model', () => {
                         }
                     })
                 })
+            
             })
         })
 
-        it('should fail if unexpected data is returned in a response', (done) => {
-            let m = new class extends Model {
-                defaults() { return {a: 1}}
-                routes() { return {save: '/collection/save'}}
-                isValidIdentifier(identifier) {
-                    expect(identifier).to.equal(5);
-                    return false;
+        it('should fail if unexpected data is returned in a response', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {a: 1}}
+                    routes() { return {save: '/collection/save'}}
+                    isValidIdentifier(identifier) {
+                        expect(identifier).to.equal(5);
+                        return false;
+                    }
                 }
-            }
 
-            moxios.withMock(() => {
+            
                 m.save().catch((error) => {
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2135,10 +2223,11 @@ describe('Model', () => {
                         response: "5"
                     })
                 })
+            
             })
         })
 
-        it('should skip if already saving', (done) => {
+        it('should skip if already saving', () => {
             let m = new class extends Model {
                 routes() { return {save: '/collection/save'}}
             }
@@ -2150,19 +2239,20 @@ describe('Model', () => {
                 throw 'Did not expect to handle save event';
             });
 
-            expectRequestToBeSkipped(m.save(), done);
+            return expectRequestToBeSkipped(m.save());
         })
 
-        it('should emit event on failure', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should emit event on failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            m.on('save.failure', () => {
-                done();
-            });
+                m.on('save.failure', () => {
+                    resolve();
+                });
 
-            moxios.withMock(() => {
+            
                 m.save().catch((error) => {
 
                 });
@@ -2172,142 +2262,158 @@ describe('Model', () => {
                         status: 500,
                     });
                 })
+            
             })
         })
 
-        it('should use save route override', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 5}}
-                getSaveRoute() { return '/test/save/route/{id}'; }
-            }
+        it('should use save route override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 5}}
+                    getSaveRoute() { return '/test/save/route/{id}'; }
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.url).to.equal('/test/save/route/5');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use save headers override', (done) => {
-            let M = class extends Model {
-                routes() { return {save: '/collection/save'}}
-                getSaveHeaders() { return {test: 'yes'} }
-            }
+        it('should use save headers override', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                    getSaveHeaders() { return {test: 'yes'} }
+                }
 
-            let m = new M({id: 5});
+                let m = new M({id: 5});
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('yes');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use default headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-                getDefaultHeaders() { return {test: 'yes'} }
-            }
+        it('should use default headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                    getDefaultHeaders() { return {test: 'yes'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('yes');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use default headers with save headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-                getDefaultHeaders() { return {test: 'yes'} }
-                getSaveHeaders()   { return {test: 'no'} }
-            }
+        it('should use default headers with save headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                    getDefaultHeaders() { return {test: 'yes'} }
+                    getSaveHeaders()   { return {test: 'no'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('no');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use save method override', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-                getSaveMethod() { return 'OPTIONS' }
-            }
+        it('should use save method override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                    getSaveMethod() { return 'OPTIONS' }
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.config.method).to.equal('options');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use save query parameters override', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-                getSaveQuery() { return {a: 1} }
-            }
+        it('should use save query parameters override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                    getSaveQuery() { return {a: 1} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.url).to.equal('/collection/save?a=1');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use model save data override', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-                getSaveData() { return {a: 1} }
-            }
+        it('should use model save data override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                    getSaveData() { return {a: 1} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.config.data).to.deep.equal('{"a":1}');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should be fatal on fatal error', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should be fatal on fatal error', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.fatal).to.equal(false);
 
                 m.save().catch((error) => {
                     expect(m.fatal).to.equal(true);
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2315,20 +2421,22 @@ describe('Model', () => {
                         status: 500
                     });
                 })
+            
             })
         })
 
-        it('should be non-fatal on success', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should be non-fatal on success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.fatal).to.equal(false);
 
                 m.save().then((response) => {
                     expect(m.fatal).to.equal(false);
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2336,20 +2444,22 @@ describe('Model', () => {
                         status: 200
                     });
                 })
+            
             })
         })
 
-        it('should be non-fatal on non-fatal failure', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should be non-fatal on non-fatal failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.fatal).to.equal(false);
 
                 m.save().catch((error) => {
                     expect(m.fatal).to.equal(false);
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2360,20 +2470,22 @@ describe('Model', () => {
                         }
                     });
                 })
+            
             })
         })
 
-        it('should clear errors on success', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should clear errors on success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            m.setErrors({a: 1});
+                m.setErrors({a: 1});
 
-            moxios.withMock(() => {
+            
                 m.save().then((response) => {
                     expect(m.errors).to.be.empty;
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2381,23 +2493,25 @@ describe('Model', () => {
                         status: 200
                     });
                 })
+            
             })
         })
 
-        it('should clear errors on fatal failure', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should clear errors on fatal failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            m._errors = {a: 1}
+                m._errors = {a: 1}
 
-            moxios.withMock(() => {
+            
                 expect(m.fatal).to.equal(false);
 
                 m.save().catch((error) => {
                     expect(m.fatal).to.equal(true);
                     expect(m.errors).to.be.empty;
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2405,19 +2519,21 @@ describe('Model', () => {
                         status: 500
                     });
                 })
+            
             })
         })
 
-        it('should set saving to true on save', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should set saving to true on save', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
 
                 expect(m.saving).to.equal(false);
                 m.save().then((response) => {
-                    done();
+                    resolve();
                 });
                 expect(m.saving).to.equal(true);
 
@@ -2426,18 +2542,20 @@ describe('Model', () => {
                         status: 200
                     });
                 })
+            
             })
         })
 
-        it('should set saving to false on save success', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should set saving to false on save success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.save().then((response) => {
                     expect(m.saving).to.equal(false);
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2445,20 +2563,22 @@ describe('Model', () => {
                         status: 200
                     });
                 })
+            
             })
         })
 
-        it('should set saving to false on save failure', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should set saving to false on save failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.saving).to.equal(false);
 
                 m.save().catch((error) => {
                     expect(m.saving).to.equal(false);
-                    done();
+                    resolve();
                 });
 
                 expect(m.saving).to.equal(true);
@@ -2468,25 +2588,27 @@ describe('Model', () => {
                         status: 500
                     });
                 })
+            
             })
         })
 
-        it('should add to all collections on create', (done) => {
-            let m = new class extends Model {
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should add to all collections on create', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            let c1 = new Collection();
-            let c2 = new Collection();
+                let c1 = new Collection();
+                let c2 = new Collection();
 
-            m.registerCollection(c1);
-            m.registerCollection(c2);
+                m.registerCollection(c1);
+                m.registerCollection(c2);
 
-            moxios.withMock(() => {
+            
                 m.save().then((response) => {
                     expect(c1.models[0]).to.equal(m);
                     expect(c2.models[0]).to.equal(m);
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2497,154 +2619,168 @@ describe('Model', () => {
                         }
                     });
                 })
+            
             })
         })
 
-        it('should use patch method if patching', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1, name: 'Fred'} }
-                routes() { return {save: '/collection/save'} }
-                getPatchMethod() { return 'OPTIONS'; }
-                shouldPatch() { return true; }
-            }
+        it('should use patch method if patching', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1, name: 'Fred'} }
+                    routes() { return {save: '/collection/save'} }
+                    getPatchMethod() { return 'OPTIONS'; }
+                    shouldPatch() { return true; }
+                }
 
-            m.name = 'John';
+                m.name = 'John';
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.config.method).to.equal('options');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use create method if creating', (done) => {
-            let m = new class extends Model {
-                getCreateMethod() { return 'OPTIONS'; }
-                routes() { return {save: '/collection/save'}}
-            }
+        it('should use create method if creating', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    getCreateMethod() { return 'OPTIONS'; }
+                    routes() { return {save: '/collection/save'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.config.method).to.equal('options');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use changed attributes only when patching', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1, name: 'Fred', age: 20}}
-                routes() { return {save: '/collection/save/{id}'}}
-                shouldPatch() { return true; }
-            }
+        it('should use changed attributes only when patching', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1, name: 'Fred', age: 20}}
+                    routes() { return {save: '/collection/save/{id}'}}
+                    shouldPatch() { return true; }
+                }
 
-            m.name = 'John';
+                m.name = 'John';
 
-            moxios.withMock(() => {
+            
                 m.save();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(JSON.parse(request.config.data)).to.deep.equal({id: 1, name: "John"});
-                    done();
+                    resolve();
+                })
+            
+            })
+        })
+
+        it('should be successful if no attributes have changed when option is enabled', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1, name: 'Fred'}}
+                    routes() { return {save: '/collection/save/{id}'}}
+                    options() { return {saveUnchanged: false} }
+                }
+
+                m.save().then((response) => {
+                    expect(response).to.be.null;
+                    resolve();
                 })
             })
         })
 
-        it('should be successful if no attributes have changed when option is enabled', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1, name: 'Fred'}}
-                routes() { return {save: '/collection/save/{id}'}}
-                options() { return {saveUnchanged: false} }
-            }
-
-            m.save().then((response) => {
-                expect(response).to.be.null;
-                done();
+        it('should pass if no validation rules are configured', () => {
+            return new Promise((resolve, reject) => {
+                let m = new Model();
+                m.validate().then((errors) => {
+                    expect(errors).to.be.empty;
+                    expect(m.errors).to.be.empty;
+                    expect(m._errors).to.be.empty;
+                    resolve();
+                })
             })
         })
 
-        it('should pass if no validation rules are configured', (done) => {
-            let m = new Model();
-            m.validate().then((errors) => {
-                expect(errors).to.be.empty;
-                expect(m.errors).to.be.empty;
-                expect(m._errors).to.be.empty;
-                done();
-            })
-        })
-
-        it('should honour validation rules that return a promise', (done) => {
-            let m = new class extends Model {
-                defaults() {
-                    return {
-                        a: null,
-                        b: null,
-                        c: null,
+        it('should honour validation rules that return a promise', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() {
+                        return {
+                            a: null,
+                            b: null,
+                            c: null,
+                        }
                     }
-                }
-                routes() {
-                    return {
-                        save: '/collection/save/{id}'
+                    routes() {
+                        return {
+                            save: '/collection/save/{id}'
+                        }
                     }
-                }
-                validation() {
-                    return {
-                        a: [
-                            (value, attribute, model) => {
+                    validation() {
+                        return {
+                            a: [
+                                (value, attribute, model) => {
+                                    return new Promise((resolve, reject) => {
+                                        setTimeout(() => resolve("A1"), 50);
+                                    });
+                                },
+                                () => {
+                                    return "A2";
+                                },
+                            ],
+                            b: (value, attribute, model) => {
                                 return new Promise((resolve, reject) => {
-                                    setTimeout(() => resolve("A1"), 50);
+                                    resolve("B");
                                 });
                             },
-                            () => {
-                                return "A2";
+                            c: (value, attribute, model) => {
+                                return "C";
                             },
-                        ],
-                        b: (value, attribute, model) => {
-                            return new Promise((resolve, reject) => {
-                                resolve("B");
-                            });
-                        },
-                        c: (value, attribute, model) => {
-                            return "C";
-                        },
+                        }
                     }
                 }
-            }
 
-            m.validate().then((result) => {
-                expect(result).to.deep.equal({
-                    b: ['B'],
-                    c: ['C'],
-                    a: ['A1', 'A2'],
+                m.validate().then((result) => {
+                    expect(result).to.deep.equal({
+                        b: ['B'],
+                        c: ['C'],
+                        a: ['A1', 'A2'],
+                    });
+                    resolve();
                 });
-                done();
-            });
+            })
         })
 
-        it('should pass if an attribute passes a validation rule', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: null}}
-                routes() { return {save: '/collection/save/{id}'}}
-                validation() {
-                    return {
-                        id: numeric,
+        it('should pass if an attribute passes a validation rule', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: null}}
+                    routes() { return {save: '/collection/save/{id}'}}
+                    validation() {
+                        return {
+                            id: numeric,
+                        }
                     }
                 }
-            }
 
-            moxios.withMock(() => {
+            
                 m.id = 5;
                 m.save().then((response) => {
                     expect(m.errors).to.be.empty;
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2652,39 +2788,43 @@ describe('Model', () => {
                         status: 200
                     });
                 })
+            
             })
         })
 
-        it('should fail if an attribute does not pass a validation rule', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {save: '/collection/save/{id}'}}
-                validation() {
-                    return {
-                        id: email,
+        it('should fail if an attribute does not pass a validation rule', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {save: '/collection/save/{id}'}}
+                    validation() {
+                        return {
+                            id: email,
+                        }
                     }
                 }
-            }
 
-            m.save().catch((error) => {
-                expect(m.fatal).to.equal(false);
-                expect(error).to.be.an.instanceof(ValidationError);
+                m.save().catch((error) => {
+                    expect(m.fatal).to.equal(false);
+                    expect(error).to.be.an.instanceof(ValidationError);
 
-                expect(m.errors).to.deep.equal({id: ["Must be a valid email address"]});
-                done();
-            });
+                    expect(m.errors).to.deep.equal({id: ["Must be a valid email address"]});
+                    resolve();
+                });
+            })
         })
 
-        it('should fail if the model fails server-side validation', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {save: '/collection/save/{id}'}}
-            }
+        it('should fail if the model fails server-side validation', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {save: '/collection/save/{id}'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.save().catch((error) => {
                     expect(error.getResponse().getData()).to.deep.equal({ id: 'No good, sorry' });
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2695,22 +2835,24 @@ describe('Model', () => {
                         }
                     });
                 })
+            
             })
         })
 
-        it('should throw if server-side validation response is bad', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {save: '/collection/save/{id}'}}
-            }
+        it('should throw if server-side validation response is bad', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {save: '/collection/save/{id}'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.save().catch((error) => {
                     expect(error.message).to.equal('Validation errors must be an object');
-                    done();
+                    resolve();
                 }).catch((error) => {
                     expect(error.message).to.equal('Validation errors must be an object');
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -2719,49 +2861,52 @@ describe('Model', () => {
                         response: 5
                     });
                 })
+            
             })
         })
 
-        it('should mutate on save if option is enabled', (done) => {
-            let M = class extends Model {
-                onSave() {
-                    let proxy = super.onSave();
-                    expect(m.a).to.equal('5');
-                    done();
+        it('should mutate on save if option is enabled', () => {
+            return new Promise((resolve, reject) => {
+                let M = class extends Model {
+                    onSave() {
+                        let proxy = super.onSave();
+                        expect(m.a).to.equal('5');
+                        resolve();
 
-                    return proxy;
-                }
+                        return proxy;
+                    }
 
-                routes() {
-                    return {
-                        save: '',
+                    routes() {
+                        return {
+                            save: '',
+                        }
+                    }
+
+                    options() {
+                        return {
+                            mutateBeforeSave: true,
+                            mutateBeforeSync: false,
+                            mutateOnChange: false,
+                        }
+                    }
+
+                    mutations() {
+                        return {
+                            a: _.toString,
+                        }
+                    }
+
+                    defaults() {
+                        return {
+                            a: 5,
+                        }
                     }
                 }
 
-                options() {
-                    return {
-                        mutateBeforeSave: true,
-                        mutateBeforeSync: false,
-                        mutateOnChange: false,
-                    }
-                }
+                let m = new M();
 
-                mutations() {
-                    return {
-                        a: _.toString,
-                    }
-                }
-
-                defaults() {
-                    return {
-                        a: 5,
-                    }
-                }
-            }
-
-            let m = new M();
-
-            m.save().catch((error) => {});
+                m.save().catch((error) => {});
+            })
         })
 
         it('should not mutate on save if option is disabled', () => {
@@ -2790,22 +2935,22 @@ describe('Model', () => {
             expect(m.a).to.equal(5);
             m.on('save', () => {
                 expect(m.a).to.equal(5);
-                done();
                 return false;
             });
         })
     })
 
     describe('delete', () => {
-        it('should handle successful delete with empty return', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {delete: '/delete/{id}'}}
-            }
+        it('should handle successful delete with empty return', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {delete: '/delete/{id}'}}
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete().then((response) => {
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2813,10 +2958,11 @@ describe('Model', () => {
                         status: 200
                     })
                 })
+            
             })
         })
 
-        it('should skip if already deleting', (done) => {
+        it('should skip if already deleting', () => {
             let m = new class extends Model {
                 routes() { return {delete: '/delete/{id}'}}
             }
@@ -2826,21 +2972,22 @@ describe('Model', () => {
             });
 
             m.deleting = true;
-            expectRequestToBeSkipped(m.delete(), done);
+            return expectRequestToBeSkipped(m.delete());
         })
 
-        it('should emit event on success', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {delete: '/delete/{id}'}}
-            }
+        it('should emit event on success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {delete: '/delete/{id}'}}
+                }
 
-            m.on('delete', (event) => {
-                expect(event.error).to.be.null;
-                done();
-            });
+                m.on('delete', (event) => {
+                    expect(event.error).to.be.null;
+                    resolve();
+                });
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
@@ -2848,21 +2995,23 @@ describe('Model', () => {
                         status: 200
                     })
                 })
+            
             })
         })
 
-        it('should emit event on failure', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {delete: '/delete/{id}'}}
-            }
+        it('should emit event on failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {delete: '/delete/{id}'}}
+                }
 
-            m.on('delete', (event) => {
-                expect(event.error).to.not.be.null;
-                done();
-            });
+                m.on('delete', (event) => {
+                    expect(event.error).to.not.be.null;
+                    resolve();
+                });
 
-            moxios.withMock(() => {
+            
                 m.delete().catch((error) => {
 
                 });
@@ -2872,124 +3021,138 @@ describe('Model', () => {
                         status: 500
                     })
                 })
+            
             })
         })
 
-        it('should use delete route override', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                getDeleteRoute() { return '/test/delete/route/{id}'; }
-            }
+        it('should use delete route override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    getDeleteRoute() { return '/test/delete/route/{id}'; }
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.url).to.equal('/test/delete/route/1');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use delete headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-                getDeleteHeaders() { return {test: 'yes'} }
-            }
+        it('should use delete headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                    getDeleteHeaders() { return {test: 'yes'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('yes');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use default headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-                getDefaultHeaders() { return {test: 'yes'} }
-            }
+        it('should use default headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                    getDefaultHeaders() { return {test: 'yes'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('yes');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use default headers with delete headers override', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-                getDefaultHeaders() { return {test: 'yes'} }
-                getDeleteHeaders() { return {test: 'no'} }
-            }
+        it('should use default headers with delete headers override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                    getDefaultHeaders() { return {test: 'yes'} }
+                    getDeleteHeaders() { return {test: 'no'} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.headers.test).to.equal('no');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use delete method override', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes() { return {delete: '/delete/{id}'}}
-                getDeleteMethod() { return 'PATCH' }
-            }
+        it('should use delete method override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes() { return {delete: '/delete/{id}'}}
+                    getDeleteMethod() { return 'PATCH' }
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.config.method).to.equal('patch');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should use delete query parameters override', (done) => {
-            let m = new class extends Model {
-                defaults() { return {id: 1}}
-                routes()   { return {delete: '/delete/{id}'}}
-                getDeleteQuery() { return {a: 1} }
-            }
+        it('should use delete query parameters override', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    defaults() { return {id: 1}}
+                    routes()   { return {delete: '/delete/{id}'}}
+                    getDeleteQuery() { return {a: 1} }
+                }
 
-            moxios.withMock(() => {
+            
                 m.delete();
 
                 moxios.wait(() => {
                     let request = moxios.requests.mostRecent();
                     expect(request.url).to.equal('/delete/1?a=1');
-                    done();
+                    resolve();
                 })
+            
             })
         })
 
-        it('should be fatal on fatal error', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-            }
+        it('should be fatal on fatal error', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.fatal).to.equal(false);
                 m.delete().catch((error) => {
                     expect(m.fatal).to.equal(true);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -2997,19 +3160,21 @@ describe('Model', () => {
                         status: 500
                     })
                 })
+            
             })
         })
 
-        it('should be non-fatal on success', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-            }
+        it('should be non-fatal on success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.fatal).to.equal(false);
                 m.delete().then((response) => {
                     expect(m.fatal).to.equal(false);
-                    done();
+                    resolve();
                 })
 
                 moxios.wait(() => {
@@ -3017,19 +3182,21 @@ describe('Model', () => {
                         status: 200
                     })
                 })
+            
             })
         })
 
-        it('should set deleting to true on delete', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-            }
+        it('should set deleting to true on delete', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.deleting).to.equal(false);
                 m.delete().then((response) => {
                     expect(m.deleting).to.equal(false);
-                    done();
+                    resolve();
                 })
 
                 expect(m.deleting).to.equal(true);
@@ -3039,19 +3206,21 @@ describe('Model', () => {
                         status: 200
                     })
                 })
+            
             })
         })
 
-        it('should set deleting to false on delete success', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-            }
+        it('should set deleting to false on delete success', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.deleting).to.equal(false);
                 m.delete().then((response) => {
                     expect(m.deleting).to.equal(false);
-                    done();
+                    resolve();
                 })
 
                 expect(m.deleting).to.equal(true);
@@ -3061,19 +3230,21 @@ describe('Model', () => {
                         status: 200
                     })
                 })
+            
             })
         })
 
-        it('should set deleting to false on delete failure', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-            }
+        it('should set deleting to false on delete failure', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                }
 
-            moxios.withMock(() => {
+            
                 expect(m.deleting).to.equal(false);
                 m.delete().catch((error) => {
                     expect(m.deleting).to.equal(false);
-                    done();
+                    resolve();
                 })
 
                 expect(m.deleting).to.equal(true);
@@ -3083,28 +3254,30 @@ describe('Model', () => {
                         status: 500
                     })
                 })
+            
             })
         })
 
-        it('should remove from all collections on delete', (done) => {
-            let m = new class extends Model {
-                routes() { return {delete: '/delete'}}
-            }
+        it('should remove from all collections on delete', () => {
+            return new Promise((resolve, reject) => {
+                let m = new class extends Model {
+                    routes() { return {delete: '/delete'}}
+                }
 
-            let c1 = new Collection();
-            let c2 = new Collection();
+                let c1 = new Collection();
+                let c2 = new Collection();
 
-            c1.add(m);
-            c2.add(m);
+                c1.add(m);
+                c2.add(m);
 
-            moxios.withMock(() => {
+            
                 expect(c1.models[0]).to.equal(m);
                 expect(c2.models[0]).to.equal(m);
 
                 m.delete().then(() => {
                     expect(c1.models).to.be.empty;
                     expect(c2.models).to.be.empty;
-                    done();
+                    resolve();
                 });
 
                 moxios.wait(() => {
@@ -3112,6 +3285,7 @@ describe('Model', () => {
                         status: 200
                     });
                 })
+            
             })
         })
     })
