@@ -12,18 +12,12 @@ Peer dependency: `vue >= 3.0.0`
 
 ## Usage
 
-```ts
+```js
 import { Model, Collection } from '@risklight/vue-mc';
 import { required, string } from '@risklight/vue-mc/validation';
 
-interface UserAttributes {
-  id?: number;
-  name: string;
-  email: string;
-}
-
-class User extends Model<UserAttributes> {
-  defaults(): Partial<UserAttributes> {
+class User extends Model {
+  defaults() {
     return {
       name: '',
       email: '',
@@ -45,7 +39,7 @@ class User extends Model<UserAttributes> {
   }
 }
 
-class Users extends Collection<User> {
+class Users extends Collection {
   model() {
     return User;
   }
@@ -55,6 +49,28 @@ class Users extends Collection<User> {
       fetch: '/users',
     };
   }
+}
+```
+
+### With TypeScript
+
+Generics provide typed attributes, `get()`, `set()`, and autocomplete:
+
+```ts
+interface UserAttributes {
+  id?: number;
+  name: string;
+  email: string;
+}
+
+class User extends Model<UserAttributes> {
+  defaults(): Partial<UserAttributes> {
+    return { name: '', email: '' };
+  }
+}
+
+class Users extends Collection<User> {
+  model() { return User; }
 }
 ```
 
