@@ -1,4 +1,4 @@
-import { reactive, shallowRef, markRaw } from 'vue';
+import { reactive, shallowRef, markRaw, type ShallowRef } from 'vue';
 
 import countBy from 'lodash/countBy';
 import defaultsDeep from 'lodash/defaultsDeep';
@@ -61,10 +61,10 @@ const replaceReactive = function(target: Record<string, any>, source: Record<str
 
 class Collection extends Base {
     private _models!: Model[];
-    private _loading!: ReturnType<typeof shallowRef<boolean>>;
-    private _saving!: ReturnType<typeof shallowRef<boolean>>;
-    private _deleting!: ReturnType<typeof shallowRef<boolean>>;
-    private _fatal!: ReturnType<typeof shallowRef<boolean>>;
+    private _loading!: ShallowRef<boolean>;
+    private _saving!: ShallowRef<boolean>;
+    private _deleting!: ShallowRef<boolean>;
+    private _fatal!: ShallowRef<boolean>;
     private _attributes!: Record<string, any>;
     private _page!: number | null;
     private _registry!: Record<string, string>;

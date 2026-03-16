@@ -366,7 +366,7 @@ abstract class Base {
     /**
      * @returns {Object} Default HTTP methods.
      */
-    getDefaultMethods(): object {
+    getDefaultMethods(): Record<string, HttpMethods> {
         return {
             fetch:  'GET',
             save:   'POST',
@@ -707,7 +707,7 @@ export default Base;
 export interface Options {
     [key: string]: any;
     model?: typeof Model;
-    methods?: Partial<Record<RequestType, HttpMethods>>;
+    methods?: Record<string, HttpMethods>;
     routeParameterPattern?: RegExp;
     // validationErrorStatus?: number;
     useDeleteBody?: boolean;

@@ -1,4 +1,4 @@
-import { reactive, shallowRef, markRaw, nextTick } from 'vue';
+import { reactive, shallowRef, markRaw, nextTick, type ShallowRef } from 'vue';
 import castArray from 'lodash/castArray';
 // cloneDeep removed — use copyFrom() which handles Model/Collection refs safely
 import defaults from 'lodash/defaults';
@@ -106,10 +106,10 @@ const replaceReactive = function(target: Record<string, any>, source: Record<str
 class Model extends Base {
     [key: string]: any;
 
-    private _loading!: ReturnType<typeof shallowRef<boolean>>;
-    private _saving!: ReturnType<typeof shallowRef<boolean>>;
-    private _deleting!: ReturnType<typeof shallowRef<boolean>>;
-    private _fatal!: ReturnType<typeof shallowRef<boolean>>;
+    private _loading!: ShallowRef<boolean>;
+    private _saving!: ShallowRef<boolean>;
+    private _deleting!: ShallowRef<boolean>;
+    private _fatal!: ShallowRef<boolean>;
 
     private _attributes!: Record<string, any>;
     private _collections!: Record<string, Collection>;
@@ -1252,10 +1252,7 @@ export default Model;
 interface ModelOptions extends Options {
     [key: string]: any;
 
-    methods?: {
-        [key: string]: HttpMethods;
-
-    };
+    methods?: Record<string, HttpMethods>;
 
     /**
      * The attribute that should be used to uniquely identify this model.
