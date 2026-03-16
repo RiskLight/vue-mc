@@ -38,7 +38,6 @@ import {
     isValid as isValidDate,
 } from "date-fns";
 
-// eslint-disable-next-line @typescript-eslint/camelcase
 import {Bundle, en_us} from './locale';
 import isAlpha from 'validator/lib/isAlpha';
 import isAlphanumeric from 'validator/lib/isAlphanumeric';
@@ -161,8 +160,7 @@ class GlobalMessages {
  * Global validation message registry.
  */
 export const messages =
-    // eslint-disable-next-line @typescript-eslint/camelcase
-    _global.__vuemc_validation_messages =
+        _global.__vuemc_validation_messages =
         _global.__vuemc_validation_messages || new GlobalMessages();
 
 /**
