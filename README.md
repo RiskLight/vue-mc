@@ -1,54 +1,110 @@
-<p>
-  <img align="left" height="120" src="http://vuemc.io/assets/images/logo.png" />
-</p>
+# @risklight/vue-mc
 
-# Models and Collections for Vue.js
+Models and Collections for Vue.js 3. Fork of [vue-mc](https://github.com/FiguredLimited/vue-mc) with Vue 3 reactivity, full TypeScript support, and generic types.
 
-[![Build Status](https://img.shields.io/travis/FiguredLimited/vue-mc.svg?style=flat-square&branch=master)](https://travis-ci.org/FiguredLimited/vue-mc)
-[![Coverage](https://img.shields.io/codecov/c/github/FiguredLimited/vue-mc/master.svg?style=flat-square)](https://codecov.io/gh/FiguredLimited/vue-mc)
-[![Latest Version](https://img.shields.io/npm/v/vue-mc.svg?style=flat-square)](https://www.npmjs.com/package/vue-mc)
-[![License](https://img.shields.io/npm/l/vue-mc.svg?style=flat-square)](https://github.com/FiguredLimited/vue-mc/blob/master/LICENSE)
+## Install
 
-### Documentation
-
-Documentation is available at **[http://vuemc.io](http://vuemc.io)**
-
-### Development
-
-#### Install
-
-Install [`yarn`](https://yarnpkg.com/en/) if you don't already have it available:
-
-```
-sudo npm install -g yarn
+```bash
+npm install @risklight/vue-mc
 ```
 
-Install the dependencies:
+Peer dependency: `vue >= 3.0.0`
 
+## Usage
+
+```ts
+import { Model, Collection } from '@risklight/vue-mc';
+import { required, string } from '@risklight/vue-mc/validation';
+
+interface UserAttributes {
+  id?: number;
+  name: string;
+  email: string;
+}
+
+class User extends Model<UserAttributes> {
+  defaults(): Partial<UserAttributes> {
+    return {
+      name: '',
+      email: '',
+    };
+  }
+
+  validation() {
+    return {
+      name: required.and(string),
+      email: required,
+    };
+  }
+
+  routes() {
+    return {
+      fetch: '/users/{id}',
+      save:  '/users',
+    };
+  }
+}
+
+class Users extends Collection<User> {
+  model() {
+    return User;
+  }
+
+  routes() {
+    return {
+      fetch: '/users',
+    };
+  }
+}
 ```
-yarn
+
+### Typed API
+
+```ts
+const user = new User({ name: 'Oleg' });
+
+user.get('name');        // string
+user.get('email');       // string
+user.set('name', 'Max'); // typed
+user.attributes.name;    // string
+user.$.name;             // string | undefined (saved state)
+user.identifier();       // string | number | null | undefined
+
+// Without generic — all attributes are any:
+const model = new Model();
+model.get('anything');   // any
 ```
 
-#### Build
+### Validation
 
-```
-yarn build --watch
-```
+```ts
+import { required, string, email, length } from '@risklight/vue-mc/validation';
 
-#### Test
-
-```
-yarn test --watch
-```
-
-#### Docs
-
-You will need to install jekyll to render and edit the documentation.
-
-```
-yarn docs
+class User extends Model<UserAttributes> {
+  validation() {
+    return {
+      name:  required.and(string).and(length(1, 100)),
+      email: required.and(email),
+    };
+  }
+}
 ```
 
-### License
+## Changes from original vue-mc
+
+- **Vue 3 reactivity** — `reactive()` for attributes, `shallowRef()` for boolean flags, `markRaw()` on instances
+- **Generic types** — `Model<A>`, `Collection<M>`, `Response<T>` with full TypeScript strict mode
+- **All types exported** — `Options`, `ModelOptions`, `HttpMethods`, `Routes`, `RequestOptions`, `BaseResponse`, etc.
+- **No cloneDeep** — replaced with `copyFrom()` to avoid circular reference stack overflow on reactive objects
+- **Build** — Rollup 3, TypeScript 5, ES module output
+
+## Build
+
+```bash
+npm install
+npm run build
+```
+
+## License
 
 [MIT](LICENSE)
